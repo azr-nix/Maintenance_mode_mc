@@ -1,0 +1,8 @@
+{
+  "id": "rizzlersmaintenance",
+  "name": "RizzlersMaintenance",
+  "version": "1.0.0",
+  "description": "Network-wide maintenance mode with UUID allowlist for Velocity proxy on RIZZLERS network.",
+  "authors": ["RIZZLERS"],
+  "main": "online.rizzlers.maintenance.RizzlersMaintenance"
+}
