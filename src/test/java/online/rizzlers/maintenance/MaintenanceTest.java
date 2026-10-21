@@ -1,5 +1,6 @@
 package online.rizzlers.maintenance;
 
+import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
 import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import com.velocitypowered.api.proxy.Player;
@@ -12,12 +13,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 public class MaintenanceTest {
 
@@ -136,27 +137,69 @@ public class MaintenanceTest {
     @Test
     @DisplayName("8. Console and unauthorized command access are handled correctly")
     void testConsoleAndUnauthorizedCommandAccess() {
-        ProxyServer mockServer = mock(ProxyServer.class);
+        ProxyServer mockServer = (ProxyServer) Proxy.newProxyInstance(
+                ProxyServer.class.getClassLoader(),
+                new Class<?>[]{ProxyServer.class},
+                (p, m, a) -> null
+        );
+
         MaintenanceCommand cmd = new MaintenanceCommand(mockServer, manager, LOGGER);
 
-        // Console access
-        ConsoleCommandSource console = mock(ConsoleCommandSource.class);
-        SimpleCommand.Invocation consoleInvocation = mock(SimpleCommand.Invocation.class);
-        when(consoleInvocation.source()).thenReturn(console);
+        // 1. Console command source
+        ConsoleCommandSource console = (ConsoleCommandSource) Proxy.newProxyInstance(
+                ConsoleCommandSource.class.getClassLoader(),
+                new Class<?>[]{ConsoleCommandSource.class},
+                (p, m, a) -> {
+                    if ("hasPermission".equals(m.getName())) return true;
+                    return null;
+                }
+        );
+        SimpleCommand.Invocation consoleInvocation = createInvocation(console);
         assertTrue(cmd.hasPermission(consoleInvocation), "Console must always have permission.");
 
-        // Unauthorized player
-        Player unprivilegedPlayer = mock(Player.class);
-        when(unprivilegedPlayer.hasPermission(MaintenanceCommand.ADMIN_PERMISSION)).thenReturn(false);
-        SimpleCommand.Invocation unprivilegedInvocation = mock(SimpleCommand.Invocation.class);
-        when(unprivilegedInvocation.source()).thenReturn(unprivilegedPlayer);
+        // 2. Unauthorized normal player
+        Player unprivilegedPlayer = (Player) Proxy.newProxyInstance(
+                Player.class.getClassLoader(),
+                new Class<?>[]{Player.class},
+                (p, m, a) -> {
+                    if ("hasPermission".equals(m.getName())) return false;
+                    return null;
+                }
+        );
+        SimpleCommand.Invocation unprivilegedInvocation = createInvocation(unprivilegedPlayer);
         assertFalse(cmd.hasPermission(unprivilegedInvocation), "Normal players without permission must be denied.");
 
-        // Authorized admin player
-        Player adminPlayer = mock(Player.class);
-        when(adminPlayer.hasPermission(MaintenanceCommand.ADMIN_PERMISSION)).thenReturn(true);
-        SimpleCommand.Invocation adminInvocation = mock(SimpleCommand.Invocation.class);
-        when(adminInvocation.source()).thenReturn(adminPlayer);
+        // 3. Authorized admin player with rizzlersmaintenance.admin permission
+        Player adminPlayer = (Player) Proxy.newProxyInstance(
+                Player.class.getClassLoader(),
+                new Class<?>[]{Player.class},
+                (p, m, a) -> {
+                    if ("hasPermission".equals(m.getName())) {
+                        return MaintenanceCommand.ADMIN_PERMISSION.equals(a[0]);
+                    }
+                    return null;
+                }
+        );
+        SimpleCommand.Invocation adminInvocation = createInvocation(adminPlayer);
         assertTrue(cmd.hasPermission(adminInvocation), "Admin players with permission must be allowed.");
+    }
+
+    private SimpleCommand.Invocation createInvocation(CommandSource source) {
+        return new SimpleCommand.Invocation() {
+            @Override
+            public CommandSource source() {
+                return source;
+            }
+
+            @Override
+            public String[] arguments() {
+                return new String[0];
+            }
+
+            @Override
+            public String alias() {
+                return "rmaint";
+            }
+        };
     }
 }
